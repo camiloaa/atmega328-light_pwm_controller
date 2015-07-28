@@ -7,8 +7,9 @@
 
 #define F_CPU 8000000UL
 
-#include<avr/io.h>
-#include<util/delay.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
 
 #define USART_BAUDRATE 9600
 #define BAUD_PRESCALE (((F_CPU/(USART_BAUDRATE*16UL)))-1)
@@ -17,12 +18,10 @@
 #define clb(byte, bit) (byte &= ~_BV(bit))
 #define tgb(byte, bit) (byte ^= _BV(bit))
 
-#define MIN_ON 10
-#define MIN_OFF 90
-#define FULL_CYCLE 100
-#define HALF_CYCLE 50
-#define DEFAULT_OFF_WARM (HALF_CYCLE/2)
-#define DEFAULT_OFF_COLD 0
+#define MIN_ON 0
+#define MIN_OFF 254
+#define FULL_CYCLE 0xFF
+#define HALF_CYCLE 0x80
 #define OFF 0
 #define ON 1
 
@@ -62,70 +61,105 @@ const unsigned char table_log2[256] = { 255, 255, 255, 255, 255, 255, 255, 255,
 
 static unsigned short long_warm_ref, long_cold_ref;
 static unsigned char step_counter_warm, step_counter_cold;
-static unsigned char step_warm, step_cold;
-static unsigned char off_warm, off_cold;
+static char step_warm, step_cold;
+static unsigned char dc_warm, dc_cold;
 static unsigned short long_warm, long_cold;
-static int out_warm, out_cold;
+volatile unsigned char timer_interrupt_req = 0;
 
-void soft_pwm() {
-	static unsigned char dc_warm = 0, dc_cold = HALF_CYCLE;
-	static char local_warm = 0;
-	static char local_cold = 0;
+ISR(TIMER0_OVF_vect) {
+	timer_interrupt_req = 0xFF;
+}
 
-	out_warm = local_warm;
-	out_cold = local_cold;
-
-	/* Process end of a cycle for warm light */
-	if (FULL_CYCLE <= ++dc_warm) {
-		dc_warm = 0;
-		/* Turn on light if necessary */
-		if (MIN_ON <= off_warm) {
-			local_warm = ON;
-		}
-		/* Process gradients */
-		if ((0 != step_warm) && (long_warm_ref < ++long_warm)) {
-			long_warm = 0;
-			if (0 < step_counter_warm) {
-				step_counter_warm--;
-				off_warm += step_warm;
-				if ((MIN_OFF < off_warm) || (MIN_ON > off_warm)) {
-					step_counter_warm = 0;
-					step_warm = 0;
-				}
+/**
+ * Process variations of duty-cycle
+ * When a number of cycles (long_x) has been reached, increment or
+ * decrement duty-cycle according to the requested step_x.
+ */
+void timer_interrupt() {
+	/* Process gradients for warm light */
+	if ((0 != step_warm) && (long_warm_ref < ++long_warm)) {
+		long_warm = 0;
+		if (0 < step_counter_warm) {
+			step_counter_warm--;
+			if (step_warm > 0 && FULL_CYCLE - step_warm < dc_warm ) {
+				// Maximum duty-cycle reached
+				dc_warm = FULL_CYCLE;
+				step_warm = 0;
+			} else if (step_warm < 0 && -step_warm > dc_warm) {
+				// Minimum duty-cycle reached
+				dc_warm = 0;
+				step_warm = 0;
+			} else {
+				dc_warm += step_warm;
 			}
+		} else {
+			// All duty-cycle steps executed
+			step_warm = 0;
 		}
 	}
 
-	/* Process end of a cycle for cold light */
-	if (FULL_CYCLE <= ++dc_cold) {
-		dc_cold = 0;
-		/* Turn on light if necessary */
-		if (MIN_ON <= off_cold) {
-			local_cold = ON;
-		}
-		/* Process gradients */
-		if ((0 != step_cold) && (long_cold_ref < ++long_cold)) {
-			long_cold = 0;
-			if (0 < step_counter_cold) {
-				step_counter_cold--;
-				off_cold += step_cold;
-				if ((MIN_OFF < off_cold) || (MIN_ON > off_cold)) {
-					step_counter_cold = 0;
-					step_cold = 0;
-				}
+	/* Process gradients for cold light */
+	if ((0 != step_cold) && (long_cold_ref < ++long_cold)) {
+		long_cold = 0;
+		if (0 < step_counter_cold) {
+			step_counter_cold--;
+			if (step_cold > 0 && FULL_CYCLE - step_cold < dc_cold ) {
+				dc_cold = FULL_CYCLE;
+				step_counter_cold = 0;
+				step_cold = 0;
+			} else if (step_cold < 0 && -step_cold > dc_cold) {
+				dc_cold = 0;
+				step_counter_cold = 0;
+				step_cold = 0;
+			} else {
+				dc_cold += step_cold;
 			}
+		} else {
+			step_cold = 0;
 		}
 	}
+}
 
-	/* Decide next output for warm light */
-	if ((dc_warm == off_warm) && (MIN_OFF >= off_warm)) {
-		local_warm = OFF;
-	}
+static void pwm_setup_60hz() {
+	// Setup PWM
+	// Freq = (16E6)/(1024*256) = 62 Hz
 
-	/* Decide next output for cold light */
-	if ((dc_cold == off_cold) && (MIN_OFF >= off_cold)) {
-		local_cold = OFF;
-	}
+	// Pinmodes: Set OC0A and OC0B as outputs
+	DDRD |=  _BV(PD5) | _BV(PD6);
+
+	// Set Initial Timer value
+	TCNT0=0x00;
+	//set non inverted PWM on OC1A pin
+	//and inverted on OC1B
+	TCCR0A = 0xB3;	// Mode 2 (non-inverted) OC0A (0x80)
+					// Mode 3 (inverted) OC0B     (0x30)
+					// Mode 3 (Fast PWM) WGM      (0x03)
+	//set compare values
+	OCR0A=0x64;
+	OCR0B=0x96;
+	// Start PWM
+	TCCR0B = 0x05;	// Prescaler 1/1024
+}
+
+static void pwm_setup_120hz() {
+	// Setup PWM
+	// Freq = (16E6)/(2*256*255) = 122 Hz
+
+	// Pinmodes: Set OC0A and OC0B as outputs
+	DDRD |=  _BV(PD5) | _BV(PD6);
+
+	// Set Initial Timer value
+	TCNT0=0x00;
+	//set non inverted PWM on OC1A pin
+	//and inverted on OC1B
+	TCCR0A = 0xB1;	// Mode 2 (non-inverted) OC0A       (0x80)
+					// Mode 3 (inverted) OC0B           (0x30)
+					// Mode 1 (Phase-corrected PWM) WGM (0x01)
+	//set compare values
+	OCR0A=0x64;
+	OCR0B=0x96;
+	// Start PWM
+	TCCR0B = 0x04;	// Prescaler 1/1024
 }
 
 int main() {
@@ -141,34 +175,24 @@ int main() {
 	UBRR0H = (BAUD_PRESCALE >> 8);
 	UBRR0L = BAUD_PRESCALE;
 
-	// Setup PWM
-	//Set Initial Timer value
-	TCNT1=0;
-	//set non inverted PWM on OC1A pin
-	//and inverted on OC1B
-	TCCR1A|=_BV(COM1A1)|_BV(COM1B1)|_BV(COM1B0);
-	//set top value to ICR1
-	ICR1=0x00FF;
-	//set corrcet phase and frequency PWM mode
-	TCCR1B|=_BV(WGM13);
-	//set compare values
-	OCR1A=0x0064;
-	OCR1B=0x0096;
-	clb(PRR, PRTIM1);// Turn on timer 1
-
-	// Pinmodes:
-	DDRB |=  _BV(PB1) | _BV(PB2);
+	// Configure PWM
+	pwm_setup_60hz();
 
 	/* Initialize variables */
 	long_cold_ref = long_warm_ref = 0;
 	step_counter_warm = step_counter_cold = 0;
 	step_warm = step_cold = 0;
-	off_warm = HALF_CYCLE;
-	off_cold = 0;
+	dc_warm = HALF_CYCLE;
+	dc_cold = 0;
 	long_warm = long_cold = 0;
 
+	// Main loop
 	while (1) {
-		soft_pwm();
+		// Check serial data
+		// Check capacitive input
+		// Full PWM cycle. Process gradients
+		if (timer_interrupt_req)
+			timer_interrupt();
 	}
 
 	return 0;
