@@ -5,11 +5,13 @@
  *      Author: camilo
  */
 
-#define F_CPU 8000000UL
+#define F_CPU 16000000UL
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <avr/pgmspace.h>
+#include <avr/wdt.h>
 
 #define USART_BAUDRATE 9600
 #define BAUD_PRESCALE (((F_CPU/(USART_BAUDRATE*16UL)))-1)
@@ -25,104 +27,92 @@
 #define OFF 0
 #define ON 1
 
-const unsigned char table_log1[256] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3,
-		3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5,
-		5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9,
-		10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 14,
-		15, 15, 16, 16, 16, 17, 17, 17, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22,
-		22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33,
-		34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-		50, 51, 52, 54, 55, 56, 57, 59, 60, 61, 63, 64, 65, 67, 68, 70, 72, 73,
-		75, 76, 78, 80, 82, 83, 85, 87, 89, 91, 93, 95, 97, 99, 102, 104, 106,
-		109, 111, 114, 116, 119, 121, 124, 127, 129, 132, 135, 138, 141, 144,
-		148, 151, 154, 158, 161, 165, 168, 172, 176, 180, 184, 188, 192, 196,
-		201, 205, 209, 214, 219, 224, 229, 234, 239, 244, 249, 255 };
-const unsigned char table_log2[256] = { 255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 254, 254,
-		254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254,
-		254, 254, 254, 254, 254, 254, 254, 253, 253, 253, 253, 253, 253, 253,
-		253, 253, 253, 253, 253, 253, 253, 253, 252, 252, 252, 252, 252, 252,
-		252, 252, 252, 252, 252, 252, 251, 251, 251, 251, 251, 251, 251, 251,
-		251, 250, 250, 250, 250, 250, 250, 250, 250, 249, 249, 249, 249, 249,
-		249, 248, 248, 248, 248, 248, 248, 247, 247, 247, 247, 247, 246, 246,
-		246, 246, 246, 245, 245, 245, 245, 244, 244, 244, 244, 243, 243, 243,
-		242, 242, 242, 241, 241, 241, 241, 240, 240, 239, 239, 239, 238, 238,
-		238, 237, 237, 236, 236, 235, 235, 235, 234, 234, 233, 233, 232, 232,
-		231, 230, 230, 229, 229, 228, 228, 227, 226, 226, 225, 224, 224, 223,
-		222, 221, 221, 220, 219, 218, 217, 217, 216, 215, 214, 213, 212, 211,
-		210, 209, 208, 207, 206, 205, 204, 203, 201, 200, 199, 198, 196, 195,
-		194, 192, 191, 190, 188, 187, 185, 183, 182, 180, 179, 177, 175, 173,
-		172, 170, 168, 166, 164, 162, 160, 158, 156, 153, 151, 149, 146, 144,
-		141, 139, 136, 134, 131, 128, 126, 123, 120, 117, 114, 111, 107, 104,
-		101, 97, 94, 90, 87, 83, 79, 75, 71, 67, 63, 59, 54, 50, 46, 41, 36, 31,
-		26, 21, 16, 11, 6, 0 };
-
-static unsigned short long_warm_ref, long_cold_ref;
-static unsigned char step_counter_warm, step_counter_cold;
-static char step_warm, step_cold;
-static unsigned char dc_warm, dc_cold;
-static unsigned short long_warm, long_cold;
-volatile unsigned char timer_interrupt_req = 0;
+unsigned char volatile timer_interrupt_req = 0;
 
 ISR(TIMER0_OVF_vect) {
-	timer_interrupt_req = 0xFF;
+	timer_interrupt_req = 1;
 }
+
+const unsigned char dc_table_log_norm[256] PROGMEM = { 0x00, 0x00, 0x01, 0x01,
+		0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x04,
+		0x04, 0x04, 0x05, 0x05, 0x05, 0x06, 0x06, 0x06, 0x06, 0x07, 0x07, 0x07,
+		0x07, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x0a, 0x0a, 0x0a, 0x0a,
+		0x0b, 0x0b, 0x0b, 0x0c, 0x0c, 0x0c, 0x0c, 0x0d, 0x0d, 0x0d, 0x0d, 0x0e,
+		0x0e, 0x0e, 0x0f, 0x0f, 0x0f, 0x0f, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11,
+		0x12, 0x12, 0x12, 0x12, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x14, 0x15,
+		0x15, 0x15, 0x16, 0x16, 0x16, 0x17, 0x17, 0x17, 0x18, 0x18, 0x18, 0x19,
+		0x19, 0x19, 0x1a, 0x1a, 0x1a, 0x1b, 0x1b, 0x1b, 0x1c, 0x1c, 0x1c, 0x1d,
+		0x1d, 0x1d, 0x1e, 0x1e, 0x1e, 0x1f, 0x1f, 0x1f, 0x20, 0x20, 0x20, 0x21,
+		0x21, 0x22, 0x22, 0x22, 0x23, 0x23, 0x24, 0x24, 0x24, 0x25, 0x25, 0x26,
+		0x26, 0x26, 0x27, 0x27, 0x28, 0x28, 0x28, 0x29, 0x29, 0x2a, 0x2a, 0x2b,
+		0x2b, 0x2c, 0x2c, 0x2d, 0x2d, 0x2d, 0x2e, 0x2e, 0x2f, 0x2f, 0x30, 0x30,
+		0x31, 0x32, 0x32, 0x33, 0x33, 0x34, 0x34, 0x35, 0x35, 0x36, 0x37, 0x37,
+		0x38, 0x38, 0x39, 0x3a, 0x3a, 0x3b, 0x3b, 0x3c, 0x3d, 0x3d, 0x3e, 0x3f,
+		0x40, 0x40, 0x41, 0x42, 0x42, 0x43, 0x44, 0x45, 0x46, 0x46, 0x47, 0x48,
+		0x49, 0x4a, 0x4b, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53,
+		0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5c, 0x5d, 0x5e, 0x5f, 0x60,
+		0x62, 0x63, 0x64, 0x65, 0x67, 0x68, 0x69, 0x6b, 0x6d, 0x6f, 0x72, 0x74,
+		0x77, 0x79, 0x7c, 0x7f, 0x81, 0x84, 0x87, 0x8a, 0x8d, 0x90, 0x94, 0x97,
+		0x9a, 0x9e, 0xa1, 0xa5, 0xa8, 0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4,
+		0xc9, 0xcd, 0xd1, 0xd6, 0xdb, 0xe0, 0xe5, 0xea, 0xef, 0xf4, 0xf9, 0xff };
+
+const unsigned char dc_table_log_inv[256] PROGMEM = { 0xff, 0xff, 0xfe, 0xfe,
+		0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0xfc, 0xfc, 0xfc, 0xfc, 0xfb, 0xfb,
+		0xfb, 0xfb, 0xfa, 0xfa, 0xfa, 0xf9, 0xf9, 0xf9, 0xf9, 0xf8, 0xf8, 0xf8,
+		0xf8, 0xf7, 0xf7, 0xf7, 0xf6, 0xf6, 0xf6, 0xf6, 0xf5, 0xf5, 0xf5, 0xf5,
+		0xf4, 0xf4, 0xf4, 0xf3, 0xf3, 0xf3, 0xf3, 0xf2, 0xf2, 0xf2, 0xf2, 0xf1,
+		0xf1, 0xf1, 0xf0, 0xf0, 0xf0, 0xf0, 0xef, 0xef, 0xef, 0xee, 0xee, 0xee,
+		0xed, 0xed, 0xed, 0xed, 0xec, 0xec, 0xec, 0xeb, 0xeb, 0xeb, 0xeb, 0xea,
+		0xea, 0xea, 0xe9, 0xe9, 0xe9, 0xe8, 0xe8, 0xe8, 0xe7, 0xe7, 0xe7, 0xe6,
+		0xe6, 0xe6, 0xe5, 0xe5, 0xe5, 0xe4, 0xe4, 0xe4, 0xe3, 0xe3, 0xe3, 0xe2,
+		0xe2, 0xe2, 0xe1, 0xe1, 0xe1, 0xe0, 0xe0, 0xe0, 0xdf, 0xdf, 0xdf, 0xde,
+		0xde, 0xdd, 0xdd, 0xdd, 0xdc, 0xdc, 0xdb, 0xdb, 0xdb, 0xda, 0xda, 0xd9,
+		0xd9, 0xd9, 0xd8, 0xd8, 0xd7, 0xd7, 0xd7, 0xd6, 0xd6, 0xd5, 0xd5, 0xd4,
+		0xd4, 0xd3, 0xd3, 0xd2, 0xd2, 0xd2, 0xd1, 0xd1, 0xd0, 0xd0, 0xcf, 0xcf,
+		0xce, 0xcd, 0xcd, 0xcc, 0xcc, 0xcb, 0xcb, 0xca, 0xca, 0xc9, 0xc8, 0xc8,
+		0xc7, 0xc7, 0xc6, 0xc5, 0xc5, 0xc4, 0xc4, 0xc3, 0xc2, 0xc2, 0xc1, 0xc0,
+		0xbf, 0xbf, 0xbe, 0xbd, 0xbd, 0xbc, 0xbb, 0xba, 0xb9, 0xb9, 0xb8, 0xb7,
+		0xb6, 0xb5, 0xb4, 0xb4, 0xb3, 0xb2, 0xb1, 0xb0, 0xaf, 0xae, 0xad, 0xac,
+		0xab, 0xaa, 0xa9, 0xa8, 0xa7, 0xa6, 0xa5, 0xa3, 0xa2, 0xa1, 0xa0, 0x9f,
+		0x9d, 0x9c, 0x9b, 0x9a, 0x98, 0x97, 0x96, 0x94, 0x92, 0x90, 0x8d, 0x8b,
+		0x88, 0x86, 0x83, 0x80, 0x7e, 0x7b, 0x78, 0x75, 0x72, 0x6f, 0x6b, 0x68,
+		0x65, 0x61, 0x5e, 0x5a, 0x57, 0x53, 0x4f, 0x4b, 0x47, 0x43, 0x3f, 0x3b,
+		0x36, 0x32, 0x2e, 0x29, 0x24, 0x1f, 0x1a, 0x15, 0x10, 0x0b, 0x06, 0x00 };
 
 /**
  * Process variations of duty-cycle
- * When a number of cycles (long_x) has been reached, increment or
+ * When a number of cycles (long_count) has been reached, increment or
  * decrement duty-cycle according to the requested step_x.
  */
-void timer_interrupt() {
+unsigned char process_gradient(char *step, unsigned char *step_counter, unsigned short *long_count, unsigned short long_ref, unsigned char dc) {
 	/* Process gradients for warm light */
-	if ((0 != step_warm) && (long_warm_ref < ++long_warm)) {
-		long_warm = 0;
-		if (0 < step_counter_warm) {
-			step_counter_warm--;
-			if (step_warm > 0 && FULL_CYCLE - step_warm < dc_warm ) {
+	if ((0 != *step) && (long_ref < ++(*long_count))) {
+		*long_count = 0;
+		if (0 < *step_counter) {
+			--*step_counter;
+			if (*step > 0 && FULL_CYCLE - *step < dc ) {
 				// Maximum duty-cycle reached
-				dc_warm = FULL_CYCLE;
-				step_warm = 0;
-			} else if (step_warm < 0 && -step_warm > dc_warm) {
+				dc = FULL_CYCLE;
+				*step = 0;
+			} else if (*step < 0 && -*step > dc) {
 				// Minimum duty-cycle reached
-				dc_warm = 0;
-				step_warm = 0;
+				dc = 0;
+				*step = 0;
 			} else {
-				dc_warm += step_warm;
+				dc += *step;
 			}
 		} else {
 			// All duty-cycle steps executed
-			step_warm = 0;
+			*step = 0;
 		}
 	}
-
-	/* Process gradients for cold light */
-	if ((0 != step_cold) && (long_cold_ref < ++long_cold)) {
-		long_cold = 0;
-		if (0 < step_counter_cold) {
-			step_counter_cold--;
-			if (step_cold > 0 && FULL_CYCLE - step_cold < dc_cold ) {
-				dc_cold = FULL_CYCLE;
-				step_counter_cold = 0;
-				step_cold = 0;
-			} else if (step_cold < 0 && -step_cold > dc_cold) {
-				dc_cold = 0;
-				step_counter_cold = 0;
-				step_cold = 0;
-			} else {
-				dc_cold += step_cold;
-			}
-		} else {
-			step_cold = 0;
-		}
-	}
+	return dc;
 }
 
 static void pwm_setup_60hz() {
 	// Setup PWM
 	// Freq = (16E6)/(1024*256) = 62 Hz
+	clb(PRR, PRTIM0);// Turn on TIMER0
 
 	// Pinmodes: Set OC0A and OC0B as outputs
 	DDRD |=  _BV(PD5) | _BV(PD6);
@@ -144,29 +134,40 @@ static void pwm_setup_60hz() {
 static void pwm_setup_120hz() {
 	// Setup PWM
 	// Freq = (16E6)/(2*256*255) = 122 Hz
+	clb(PRR, PRTIM0);// Turn on TIMER0
 
 	// Pinmodes: Set OC0A and OC0B as outputs
-	DDRD |=  _BV(PD5) | _BV(PD6);
+	DDRD |=  _BV(PD5) | _BV(PD6) | _BV(PD0);
 
 	// Set Initial Timer value
-	TCNT0=0x00;
+	TCNT0=0x80;
+	//set compare values
+	OCR0A=0x64;
+	OCR0B=0x96;
 	//set non inverted PWM on OC1A pin
 	//and inverted on OC1B
 	TCCR0A = 0xB1;	// Mode 2 (non-inverted) OC0A       (0x80)
 					// Mode 3 (inverted) OC0B           (0x30)
 					// Mode 1 (Phase-corrected PWM) WGM (0x01)
-	//set compare values
-	OCR0A=0x64;
-	OCR0B=0x96;
 	// Start PWM
-	TCCR0B = 0x04;	// Prescaler 1/1024
+	TCCR0B = 0x04;	// Prescaler 1/256
+	TIFR0  =  _BV(TOV0); // Clean interrupt request
+	TIMSK0 |= _BV(TOIE0); // Enable interrupt request
 }
 
 int main() {
-	unsigned int super_long_count = 0;
+	// Gradient processing variables
+	unsigned short long_warm_ref, long_cold_ref;
+	unsigned char step_counter_warm, step_counter_cold;
+	char step_warm, step_cold;
+	unsigned char dc_warm, dc_cold;
+	unsigned char dc_warm_out, dc_cold_out;
+	unsigned short long_warm, long_cold;
 
-	/* HW-Initialization */
-	PRR = 0; // Turn off all peripherals
+	// HW-Initialization
+	// PRR = 0xFF; // Turn off all peripherals
+	wdt_disable();
+	sei();
 
 	// Serial Comm:
 	clb(PRR, PRUSART0);// Turn on USART
@@ -176,9 +177,9 @@ int main() {
 	UBRR0L = BAUD_PRESCALE;
 
 	// Configure PWM
-	pwm_setup_60hz();
+	pwm_setup_120hz();
 
-	/* Initialize variables */
+	// Initialize variables
 	long_cold_ref = long_warm_ref = 0;
 	step_counter_warm = step_counter_cold = 0;
 	step_warm = step_cold = 0;
@@ -191,8 +192,16 @@ int main() {
 		// Check serial data
 		// Check capacitive input
 		// Full PWM cycle. Process gradients
-		if (timer_interrupt_req)
-			timer_interrupt();
+		if (timer_interrupt_req) {
+			timer_interrupt_req = 0;
+			dc_warm = process_gradient(&step_warm, &step_counter_warm,  &long_warm, long_warm_ref, dc_warm);
+			dc_cold = process_gradient(&step_cold, &step_counter_cold,  &long_cold, long_cold_ref, dc_cold);
+			dc_warm_out = pgm_read_byte(&(dc_table_log_norm[dc_warm]));
+			dc_cold_out = pgm_read_byte(&(dc_table_log_inv[dc_cold]));
+			// if (OCR0A != dc_warm_out) OCR0A = dc_warm_out;
+			// if (OCR0B != dc_cold_out) OCR0B = dc_cold_out;
+			PORTB ^= _BV(PD0);
+		}
 	}
 
 	return 0;

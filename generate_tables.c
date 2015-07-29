@@ -34,30 +34,26 @@ void genarray(int *array, int top, int max, double nom, double den, double step)
 
 }
 
-void printarray(int *array, int top, int base, int split) {
-    int j, k;
-    printf("{");
-    for (k = 0; k < 4; k++) {
-        printf("{");
-        for (j = 0; j < top; j++) {
-            if (0 == j % split)
-                printf("\n");
-            printf("%3d", array[j + top * k]);
-            if (j != top - 1)
-                printf(",");
-        }
-        printf("}\n");
-        printf("{");
-        for (j = 0; j < top; j++) {
-            if (0 == j % split)
-                printf("\n");
-            printf("%3d", base - array[j + top * k]);
-            if (j != top - 1)
-                printf(",");
-        }
-        printf("}\n");
-    }
-    printf("}\n");
+void printarray(int *array, int top, int base, int split, int k) {
+	int j;
+	printf("{");
+	for (j = 0; j < top; j++) {
+		if (0 == j % split)
+			printf("\n");
+		printf("0x%02x", array[j + top * k]);
+		if (j != top - 1)
+			printf(",");
+	}
+	printf("}\n");
+	printf("{");
+	for (j = 0; j < top; j++) {
+		if (0 == j % split)
+			printf("\n");
+		printf("0x%02x", base - array[j + top * k]);
+		if (j != top - 1)
+			printf(",");
+	}
+	printf("}\n");
 }
 
 /* Experimented with different values trying to match the curve showed in
@@ -79,7 +75,7 @@ int main() {
     // genarray(base127, 128, 127, 53273, 1394400, 0.5); // Translate 127->127
     genarray(base127, 128, 256, 53273, 1220100, 0.4); // Translate 127->255
     genarray(base255, 256, 256, 44553, 2048810, 0.5); // Translate 255->255
-    printarray(base255, 256, 255, 16);
+    printarray(base255, 256, 255, 16, 2);
     return 0;
 }
 
