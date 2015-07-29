@@ -1,0 +1,7 @@
+/generate_tables
+.*
+*.elf
+*.o
+*.out
+*.hex
+*.vcd
