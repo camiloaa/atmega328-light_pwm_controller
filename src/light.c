@@ -5,215 +5,140 @@
  *      Author: camilo
  */
 
-#define F_CPU 16000000UL
-
+#include "light.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <avr/pgmspace.h>
 #include <avr/wdt.h>
 #include <util/delay.h>
+#include <stdbool.h>
+#include "timer.h"
+#include "uart.h"
 
-#define USART_BAUDRATE 9600
-#define BAUD_PRESCALE (((F_CPU/(USART_BAUDRATE*16UL)))-1)
+#define LIGHT_ON
 
-#define stb(byte, bit) (byte |= _BV(bit))
-#define clb(byte, bit) (byte &= ~_BV(bit))
-#define tgb(byte, bit) (byte ^= _BV(bit))
+#ifdef LIGHT_ON
+#define INIT_STEP   1
+#define INIT_COUNT 30
+#define INIT_REF   10
+#else
+#define INIT_STEP  0
+#define INIT_COUNT 0
+#define INIT_REF   0
+#endif
 
-#define MIN_ON 0
-#define MIN_OFF 254
-#define FULL_CYCLE 0xFF
-#define HALF_CYCLE 0x80
-#define OFF 0
-#define ON 1
-
-volatile unsigned char timer_interrupt_req = 0;
-volatile long long a = 0;
-
-ISR(__vector_default){}
-
-ISR(TIMER0_OVF_vect) {
-	timer_interrupt_req = 1;
+ISR(__vector_default) {
 }
 
+extern const unsigned char dc_table_log_inv[] PROGMEM;
+extern const unsigned char dc_table_log_norm[] PROGMEM;
 
-const unsigned char dc_table_log_norm[256] PROGMEM = { 0x00, 0x00, 0x01, 0x01,
-		0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x04,
-		0x04, 0x04, 0x05, 0x05, 0x05, 0x06, 0x06, 0x06, 0x06, 0x07, 0x07, 0x07,
-		0x07, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x0a, 0x0a, 0x0a, 0x0a,
-		0x0b, 0x0b, 0x0b, 0x0c, 0x0c, 0x0c, 0x0c, 0x0d, 0x0d, 0x0d, 0x0d, 0x0e,
-		0x0e, 0x0e, 0x0f, 0x0f, 0x0f, 0x0f, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11,
-		0x12, 0x12, 0x12, 0x12, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x14, 0x15,
-		0x15, 0x15, 0x16, 0x16, 0x16, 0x17, 0x17, 0x17, 0x18, 0x18, 0x18, 0x19,
-		0x19, 0x19, 0x1a, 0x1a, 0x1a, 0x1b, 0x1b, 0x1b, 0x1c, 0x1c, 0x1c, 0x1d,
-		0x1d, 0x1d, 0x1e, 0x1e, 0x1e, 0x1f, 0x1f, 0x1f, 0x20, 0x20, 0x20, 0x21,
-		0x21, 0x22, 0x22, 0x22, 0x23, 0x23, 0x24, 0x24, 0x24, 0x25, 0x25, 0x26,
-		0x26, 0x26, 0x27, 0x27, 0x28, 0x28, 0x28, 0x29, 0x29, 0x2a, 0x2a, 0x2b,
-		0x2b, 0x2c, 0x2c, 0x2d, 0x2d, 0x2d, 0x2e, 0x2e, 0x2f, 0x2f, 0x30, 0x30,
-		0x31, 0x32, 0x32, 0x33, 0x33, 0x34, 0x34, 0x35, 0x35, 0x36, 0x37, 0x37,
-		0x38, 0x38, 0x39, 0x3a, 0x3a, 0x3b, 0x3b, 0x3c, 0x3d, 0x3d, 0x3e, 0x3f,
-		0x40, 0x40, 0x41, 0x42, 0x42, 0x43, 0x44, 0x45, 0x46, 0x46, 0x47, 0x48,
-		0x49, 0x4a, 0x4b, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53,
-		0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5c, 0x5d, 0x5e, 0x5f, 0x60,
-		0x62, 0x63, 0x64, 0x65, 0x67, 0x68, 0x69, 0x6b, 0x6d, 0x6f, 0x72, 0x74,
-		0x77, 0x79, 0x7c, 0x7f, 0x81, 0x84, 0x87, 0x8a, 0x8d, 0x90, 0x94, 0x97,
-		0x9a, 0x9e, 0xa1, 0xa5, 0xa8, 0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4,
-		0xc9, 0xcd, 0xd1, 0xd6, 0xdb, 0xe0, 0xe5, 0xea, 0xef, 0xf4, 0xf9, 0xff };
-
-const unsigned char dc_table_log_inv[256] PROGMEM = { 0xff, 0xff, 0xfe, 0xfe,
-		0xfe, 0xfe, 0xfd, 0xfd, 0xfd, 0xfd, 0xfc, 0xfc, 0xfc, 0xfc, 0xfb, 0xfb,
-		0xfb, 0xfb, 0xfa, 0xfa, 0xfa, 0xf9, 0xf9, 0xf9, 0xf9, 0xf8, 0xf8, 0xf8,
-		0xf8, 0xf7, 0xf7, 0xf7, 0xf6, 0xf6, 0xf6, 0xf6, 0xf5, 0xf5, 0xf5, 0xf5,
-		0xf4, 0xf4, 0xf4, 0xf3, 0xf3, 0xf3, 0xf3, 0xf2, 0xf2, 0xf2, 0xf2, 0xf1,
-		0xf1, 0xf1, 0xf0, 0xf0, 0xf0, 0xf0, 0xef, 0xef, 0xef, 0xee, 0xee, 0xee,
-		0xed, 0xed, 0xed, 0xed, 0xec, 0xec, 0xec, 0xeb, 0xeb, 0xeb, 0xeb, 0xea,
-		0xea, 0xea, 0xe9, 0xe9, 0xe9, 0xe8, 0xe8, 0xe8, 0xe7, 0xe7, 0xe7, 0xe6,
-		0xe6, 0xe6, 0xe5, 0xe5, 0xe5, 0xe4, 0xe4, 0xe4, 0xe3, 0xe3, 0xe3, 0xe2,
-		0xe2, 0xe2, 0xe1, 0xe1, 0xe1, 0xe0, 0xe0, 0xe0, 0xdf, 0xdf, 0xdf, 0xde,
-		0xde, 0xdd, 0xdd, 0xdd, 0xdc, 0xdc, 0xdb, 0xdb, 0xdb, 0xda, 0xda, 0xd9,
-		0xd9, 0xd9, 0xd8, 0xd8, 0xd7, 0xd7, 0xd7, 0xd6, 0xd6, 0xd5, 0xd5, 0xd4,
-		0xd4, 0xd3, 0xd3, 0xd2, 0xd2, 0xd2, 0xd1, 0xd1, 0xd0, 0xd0, 0xcf, 0xcf,
-		0xce, 0xcd, 0xcd, 0xcc, 0xcc, 0xcb, 0xcb, 0xca, 0xca, 0xc9, 0xc8, 0xc8,
-		0xc7, 0xc7, 0xc6, 0xc5, 0xc5, 0xc4, 0xc4, 0xc3, 0xc2, 0xc2, 0xc1, 0xc0,
-		0xbf, 0xbf, 0xbe, 0xbd, 0xbd, 0xbc, 0xbb, 0xba, 0xb9, 0xb9, 0xb8, 0xb7,
-		0xb6, 0xb5, 0xb4, 0xb4, 0xb3, 0xb2, 0xb1, 0xb0, 0xaf, 0xae, 0xad, 0xac,
-		0xab, 0xaa, 0xa9, 0xa8, 0xa7, 0xa6, 0xa5, 0xa3, 0xa2, 0xa1, 0xa0, 0x9f,
-		0x9d, 0x9c, 0x9b, 0x9a, 0x98, 0x97, 0x96, 0x94, 0x92, 0x90, 0x8d, 0x8b,
-		0x88, 0x86, 0x83, 0x80, 0x7e, 0x7b, 0x78, 0x75, 0x72, 0x6f, 0x6b, 0x68,
-		0x65, 0x61, 0x5e, 0x5a, 0x57, 0x53, 0x4f, 0x4b, 0x47, 0x43, 0x3f, 0x3b,
-		0x36, 0x32, 0x2e, 0x29, 0x24, 0x1f, 0x1a, 0x15, 0x10, 0x0b, 0x06, 0x00 };
+light_t all_lights[N_LIGHT];
 
 /**
  * Process variations of duty-cycle
  * When a number of cycles (long_count) has been reached, increment or
  * decrement duty-cycle according to the requested step_x.
  */
-unsigned char process_gradient(char *step, unsigned char *step_counter, unsigned short *long_count, unsigned short long_ref, unsigned char dc) {
+bool process_gradient(light_t *light) {
 	/* Process gradients for warm light */
-	if ((0 != *step) && (long_ref > ++(*long_count))) {
-		*long_count = 0;
-		if (0 < *step_counter) {
-			--*step_counter;
-			if (*step > 0 && FULL_CYCLE - *step < dc ) {
+	if ((0 != light->step) && (light->long_ref < (++light->long_count))) {
+		light->long_count = 0;
+		if (0 < light->step_count) {
+			--light->step_count;
+			if ((light->step > 0) && (FULL_CYCLE - light->step < light->dc)) {
 				// Maximum duty-cycle reached
-				dc = FULL_CYCLE;
-				*step = 0;
-			} else if (*step < 0 && -*step > dc) {
+				light->dc = FULL_CYCLE;
+				light->step = 0;
+			} else if ((light->step < 0) && (-light->step > light->dc)) {
 				// Minimum duty-cycle reached
-				dc = 0;
-				*step = 0;
+				light->dc = 0;
+				light->step = 0;
 			} else {
-				dc += *step;
+				light->dc += light->step;
 			}
 		} else {
 			// All duty-cycle steps executed
-			*step = 0;
+			light->step = 0;
+			light->long_ref = 0;
 		}
+		return true;
 	}
-	return dc;
-}
-
-static void pwm_setup_60hz() {
-	// Setup PWM
-	// Freq = (16E6)/(1024*256) = 62 Hz
-	clb(PRR, PRTIM0);// Turn on TIMER0
-
-	// Pinmodes: Set OC0A and OC0B as outputs
-	DDRD |=  _BV(PD5) | _BV(PD6);
-
-	// Set Initial Timer value
-	TCNT0=0x00;
-	//set non inverted PWM on OC1A pin
-	//and inverted on OC1B
-	TCCR0A = 0xB3;	// Mode 2 (non-inverted) OC0A (0x80)
-					// Mode 3 (inverted) OC0B     (0x30)
-					// Mode 3 (Fast PWM) WGM      (0x03)
-	//set compare values
-	OCR0A=0x64;
-	OCR0B=0x96;
-	// Start PWM
-	TCCR0B = 0x05;	// Prescaler 1/1024
-}
-
-static void pwm_setup_120hz() {
-	// Setup PWM
-	// Freq = (16E6)/(2*256*255) = 122 Hz
-	clb(PRR, PRTIM0);// Turn on TIMER0
-
-	// Pinmodes: Set OC0A and OC0B as outputs
-	DDRD |=  _BV(PD5) | _BV(PD6);
-
-	// Set Initial Timer value
-	TCNT0=0x0;
-	//set compare values
-	OCR0A=0x64;
-	OCR0B=0x96;
-	//set non inverted PWM on OC1A pin
-	//and inverted on OC1B
-	TCCR0A = 0xB1;	// Mode 2 (non-inverted) OC0A       (0x80)
-					// Mode 3 (inverted) OC0B           (0x30)
-					// Mode 1 (Phase-corrected PWM) WGM (0x01)
-	// Start PWM
-	TCCR0B = 0x04;	// Prescaler 1/256
-	TIFR0  |= _BV(TOV0); // Clean interrupt request
-	TIMSK0 |= _BV(TOIE0); // Enable interrupt request
+	return false;
 }
 
 int main() {
-	// Gradient processing variables
-	unsigned short long_warm_ref, long_cold_ref;
-	unsigned char step_counter_warm, step_counter_cold;
-	char step_warm, step_cold;
-	unsigned char dc_warm, dc_cold;
-	unsigned char dc_warm_out, dc_cold_out;
-	unsigned short long_warm, long_cold;
-
+	unsigned char tx_pointer = 0;
 	// HW-Initialization
-	PRR = 0xFF; // Turn off all peripherals
 	cli();
+	PRR = 0xFF; // Turn off all peripherals
 	wdt_disable();
+	// No watchdog. FIXME
+
+	// Initialize variables
+	// Turn on the lights when processor resets defined by LIGHT_ON macro.
+	all_lights[WARM_LIGHT].long_ref = INIT_REF;
+	all_lights[WARM_LIGHT].step_count = INIT_COUNT;
+	all_lights[WARM_LIGHT].step = 2*INIT_STEP;
+	all_lights[WARM_LIGHT].dc = 0;
+	all_lights[WARM_LIGHT].long_count = 0;
+	all_lights[COLD_LIGHT].long_ref = INIT_REF;
+	all_lights[COLD_LIGHT].step_count = INIT_COUNT;
+	all_lights[COLD_LIGHT].step = 1*INIT_STEP;
+	all_lights[COLD_LIGHT].dc = 0;
+	all_lights[COLD_LIGHT].long_count = 0;
+	all_lights[WARM_LIGHT].dc_out = pgm_read_byte(
+			&(dc_table_log_norm[all_lights[WARM_LIGHT].dc]));
+	all_lights[COLD_LIGHT].dc_out = pgm_read_byte(
+			&(dc_table_log_inv[all_lights[COLD_LIGHT].dc]));
 
 	// Serial Comm:
-	clb(PRR, PRUSART0);// Turn on USART
-	UCSR0B |= (1 << RXEN0) | (1 << TXEN0);
-	UCSR0C |= (1 << UCSZ00) | (1 << UCSZ01);
-	UBRR0H = (BAUD_PRESCALE >> 8);
-	UBRR0L = BAUD_PRESCALE;
+	uart_setup();
 
 	// Configure PWM
-	pwm_setup_120hz();
+	pwm_setup();
+
+	// Configure LED
 	DDRB |= _BV(PB5);
 	PORTB = 0;
 
-	// Initialize variables
-	long_cold_ref = long_warm_ref = 3;
-	step_counter_warm = step_counter_cold = 100;
-	step_warm = step_cold = 1;
-	dc_warm = HALF_CYCLE;
-	dc_cold = 0;
-	long_warm = long_cold = 0;
+	// Activate the lamps
+	OCR0A = all_lights[WARM_LIGHT].dc_out;
+	OCR0B = all_lights[COLD_LIGHT].dc_out;
 
 	sei();
 	// Main loop
 	while (1) {
 		// Check serial data
+		if (serial_cmd_ready && TX_READY()) {
+			put_byte(serial_cmd_answer[tx_pointer]);
+			++tx_pointer;
+			tx_pointer %= 4;
+			if (0 == tx_pointer) // Answer transmited
+				serial_cmd_ready = false;
+		}
 		// Check capacitive input
+
 		// Full PWM cycle. Process gradients
-		if (timer_interrupt_req != 0) {
-			cli();
-			timer_interrupt_req = 0;
-			dc_warm = process_gradient(&step_warm, &step_counter_warm,  &long_warm, long_warm_ref, dc_warm);
-			dc_cold = process_gradient(&step_cold, &step_counter_cold,  &long_cold, long_cold_ref, dc_cold);
-			dc_warm_out = pgm_read_byte(&(dc_table_log_norm[dc_warm]));
-			dc_cold_out = pgm_read_byte(&(dc_table_log_inv[dc_cold]));
-			if (OCR0A != dc_warm_out) OCR0A = dc_warm_out;
-			if (OCR0B != dc_cold_out) OCR0B = dc_cold_out;
-			if (a >= 80) {
-				a = 0;
-				PORTB ^= _BV(PB5);
+		if (timer_interrupt_req) {
+			timer_interrupt_req = false;
+			// First calculate new duty cycle
+			// Then use linear to log transformation:
+			//     50% perceived brightness corresponds to 25% power output
+			if (process_gradient(all_lights + WARM_LIGHT)) {
+				all_lights[WARM_LIGHT].dc_out = pgm_read_byte(
+						&(dc_table_log_norm[all_lights[WARM_LIGHT].dc]));
 			}
-			sei();
+			if (process_gradient(all_lights + COLD_LIGHT)) {
+				all_lights[COLD_LIGHT].dc_out = pgm_read_byte(
+						&(dc_table_log_inv[all_lights[COLD_LIGHT].dc]));
+			}
+			// And adjust the actual duty cycle in TIMER0
+			if (OCR0A != all_lights[WARM_LIGHT].dc_out)
+				OCR0A = all_lights[WARM_LIGHT].dc_out;
+			if (OCR0B != all_lights[COLD_LIGHT].dc_out)
+				OCR0B = all_lights[COLD_LIGHT].dc_out;
 		}
 	}
 

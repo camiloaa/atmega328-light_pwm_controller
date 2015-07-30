@@ -14,13 +14,12 @@ OBJDIR = obj
 # specify the name of the target
 TARGET_NAME = light
 # specify the final output directory
-OUT_DIR = out
 BIN = $(OBJDIR)/$(TARGET_NAME).elf
 HEXREC = $(OBJDIR)/$(TARGET_NAME).hex
 
 ############################################################################################################################################
 # sources from sig config generation, add only the source files
-C_SOURCES = light.c
+C_SOURCES = light.c tables.c timer.c uart.c
 
 SOURCES = $(C_SOURCES) $(CPP_SOURCES) $(ASM_SOURCES)
 

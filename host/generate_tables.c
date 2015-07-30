@@ -1,5 +1,34 @@
 #include <stdio.h>
 #include <math.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+/** GET_ROOT_PTR (pointer2member, memberName, typeName)
+ * Given a pointer to an element within an structure,
+ * returns a pointer to the structure itself.
+ *
+ * i.e. Given this (pseudo)code:
+ *         typedef struct dummyS {
+ *            uint32_t field32bits;
+ *            char     *string;
+ *            uint32_t other_field;
+ *         } dummyT;
+ *
+ *         dummyT a;
+ *         uint32_t *b = &a.other_field;
+ *         dummyT *c = GET_ROOT_PTR(b, other_field, dummyT);
+ *
+ * Variable 'c' contains '&a'
+ *
+ * */
+#define GET_ROOT_PTR(ptr2Member, memberName, typeName)  \
+    ((typeName*) ((uint8_t*)ptr2Member - (uint32_t)&((typeName*)0)->memberName))
+
+#define GET_MEMBER_OFFSET(memberName, typeName) \
+	((uintptr_t)(&((typeName*)0)->memberName))
+
+#define BETWEEN(x,a,b) ( ((x)>=(a)) && ((x)<(b)) )
+#define ROUNDUP(x,i) ((0==((x)%(i)))? (x):((x) + (i) - (x)%(i)))
 
 /* Generate 4 tables for different visual curves
  *      linear = Just one-to-one

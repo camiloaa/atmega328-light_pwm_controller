@@ -2,6 +2,7 @@ include project.mk
 
 # add seach paths
 vpath %.c $(SOURCEDIRS)
+vpath %.cpp $(SOURCEDIRS)
 vpath %.s $(SOURCEDIRS)
 vpath %.h $(INCLUDEDIRS)
 vpath %.lib $(LIBPATH)
@@ -34,7 +35,7 @@ CFLAGS += -g
 # Warnings: enable all warnings, warn if inline fails
 CFLAGS += -Wall -Winline
 # optimization: use regs as debug symbols, optimization for size
-CFLAGS += -O2
+#CFLAGS += -O2
 # compile each data element to its own data section
 #CFLAGS += -fdata-sections
 #assembler directives
@@ -130,4 +131,4 @@ $(APP) : $(AOBJS)
 OBJCP = $(CC_ROOT)/bin/$(CC_PREFIX)objcopy$(CC_SUFFIX)
 
 $(HEXREC) : $(BIN)
-	$(OBJCP) -O srec $(BIN) $@ -j .app.init -j .app.text -j .app.data -j .app.bss
+	$(OBJCP) -j .text -j .data -O ihex $(BIN) $@
