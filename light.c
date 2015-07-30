@@ -12,6 +12,7 @@
 #include <util/delay.h>
 #include <avr/pgmspace.h>
 #include <avr/wdt.h>
+#include <util/delay.h>
 
 #define USART_BAUDRATE 9600
 #define BAUD_PRESCALE (((F_CPU/(USART_BAUDRATE*16UL)))-1)
@@ -27,11 +28,15 @@
 #define OFF 0
 #define ON 1
 
-unsigned char volatile timer_interrupt_req = 0;
+volatile unsigned char timer_interrupt_req = 0;
+volatile long long a = 0;
+
+ISR(__vector_default){}
 
 ISR(TIMER0_OVF_vect) {
 	timer_interrupt_req = 1;
 }
+
 
 const unsigned char dc_table_log_norm[256] PROGMEM = { 0x00, 0x00, 0x01, 0x01,
 		0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x04,
@@ -86,7 +91,7 @@ const unsigned char dc_table_log_inv[256] PROGMEM = { 0xff, 0xff, 0xfe, 0xfe,
  */
 unsigned char process_gradient(char *step, unsigned char *step_counter, unsigned short *long_count, unsigned short long_ref, unsigned char dc) {
 	/* Process gradients for warm light */
-	if ((0 != *step) && (long_ref < ++(*long_count))) {
+	if ((0 != *step) && (long_ref > ++(*long_count))) {
 		*long_count = 0;
 		if (0 < *step_counter) {
 			--*step_counter;
@@ -137,10 +142,10 @@ static void pwm_setup_120hz() {
 	clb(PRR, PRTIM0);// Turn on TIMER0
 
 	// Pinmodes: Set OC0A and OC0B as outputs
-	DDRD |=  _BV(PD5) | _BV(PD6) | _BV(PD0);
+	DDRD |=  _BV(PD5) | _BV(PD6);
 
 	// Set Initial Timer value
-	TCNT0=0x80;
+	TCNT0=0x0;
 	//set compare values
 	OCR0A=0x64;
 	OCR0B=0x96;
@@ -151,7 +156,7 @@ static void pwm_setup_120hz() {
 					// Mode 1 (Phase-corrected PWM) WGM (0x01)
 	// Start PWM
 	TCCR0B = 0x04;	// Prescaler 1/256
-	TIFR0  =  _BV(TOV0); // Clean interrupt request
+	TIFR0  |= _BV(TOV0); // Clean interrupt request
 	TIMSK0 |= _BV(TOIE0); // Enable interrupt request
 }
 
@@ -165,9 +170,9 @@ int main() {
 	unsigned short long_warm, long_cold;
 
 	// HW-Initialization
-	// PRR = 0xFF; // Turn off all peripherals
+	PRR = 0xFF; // Turn off all peripherals
+	cli();
 	wdt_disable();
-	sei();
 
 	// Serial Comm:
 	clb(PRR, PRUSART0);// Turn on USART
@@ -178,29 +183,37 @@ int main() {
 
 	// Configure PWM
 	pwm_setup_120hz();
+	DDRB |= _BV(PB5);
+	PORTB = 0;
 
 	// Initialize variables
-	long_cold_ref = long_warm_ref = 0;
-	step_counter_warm = step_counter_cold = 0;
-	step_warm = step_cold = 0;
+	long_cold_ref = long_warm_ref = 3;
+	step_counter_warm = step_counter_cold = 100;
+	step_warm = step_cold = 1;
 	dc_warm = HALF_CYCLE;
 	dc_cold = 0;
 	long_warm = long_cold = 0;
 
+	sei();
 	// Main loop
 	while (1) {
 		// Check serial data
 		// Check capacitive input
 		// Full PWM cycle. Process gradients
-		if (timer_interrupt_req) {
+		if (timer_interrupt_req != 0) {
+			cli();
 			timer_interrupt_req = 0;
 			dc_warm = process_gradient(&step_warm, &step_counter_warm,  &long_warm, long_warm_ref, dc_warm);
 			dc_cold = process_gradient(&step_cold, &step_counter_cold,  &long_cold, long_cold_ref, dc_cold);
 			dc_warm_out = pgm_read_byte(&(dc_table_log_norm[dc_warm]));
 			dc_cold_out = pgm_read_byte(&(dc_table_log_inv[dc_cold]));
-			// if (OCR0A != dc_warm_out) OCR0A = dc_warm_out;
-			// if (OCR0B != dc_cold_out) OCR0B = dc_cold_out;
-			PORTB ^= _BV(PD0);
+			if (OCR0A != dc_warm_out) OCR0A = dc_warm_out;
+			if (OCR0B != dc_cold_out) OCR0B = dc_cold_out;
+			if (a >= 80) {
+				a = 0;
+				PORTB ^= _BV(PB5);
+			}
+			sei();
 		}
 	}
 
