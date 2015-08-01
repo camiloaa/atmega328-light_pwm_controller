@@ -20,8 +20,8 @@
 
 #ifdef LIGHT_ON
 #define INIT_STEP   1
-#define INIT_COUNT 30
-#define INIT_REF   10
+#define INIT_COUNT 40
+#define INIT_REF   20
 #else
 #define INIT_STEP  0
 #define INIT_COUNT 0
@@ -93,15 +93,15 @@ int main() {
 	all_lights[COLD_LIGHT].dc_out = pgm_read_byte(
 			&(dc_table_log_inv[all_lights[COLD_LIGHT].dc]));
 
+	// Configure COMM_LED
+	DDRB |= _BV(PB5);
+	PORTB = 0;
+
 	// Serial Comm:
 	uart_setup();
 
 	// Configure PWM
 	pwm_setup();
-
-	// Configure LED
-	DDRB |= _BV(PB5);
-	PORTB = 0;
 
 	// Activate the lamps
 	OCR0A = all_lights[WARM_LIGHT].dc_out;

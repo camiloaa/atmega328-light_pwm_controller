@@ -35,7 +35,7 @@ CFLAGS += -g
 # Warnings: enable all warnings, warn if inline fails
 CFLAGS += -Wall -Winline
 # optimization: use regs as debug symbols, optimization for size
-#CFLAGS += -O2
+CFLAGS += -O2
 # compile each data element to its own data section
 #CFLAGS += -fdata-sections
 #assembler directives

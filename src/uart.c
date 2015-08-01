@@ -42,6 +42,8 @@ ISR(USART_RX_vect) {
 	char inchar;
 	inchar = UDR0;
 
+	PORTB ^= _BV(PB5);
+
 	/* Check if it's a command
 	 * 'W' writes to a register
 	 * 'R' reads from a register
