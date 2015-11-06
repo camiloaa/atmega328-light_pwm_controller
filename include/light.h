@@ -20,8 +20,8 @@
 
 typedef struct light_struct light_t;
 struct __attribute__((packed)) light_struct {
-	char step;						// 0
-	unsigned char dc;				// 1
+	char step;				// 0
+	unsigned char dc;			// 1
 	unsigned char step_count;		// 2
 	unsigned char dc_out;			// 3
 	unsigned short long_ref;		// 4 - 5
@@ -33,7 +33,7 @@ struct __attribute__((packed)) light_struct {
 
 /*
 typedef enum light_registers {
-	STEP_REG			= GET_MEMBER_OFFSET(step, light_t),
+	STEP_REG		= GET_MEMBER_OFFSET(step, light_t),
 	DUTY_CYCLE_REG		= GET_MEMBER_OFFSET(dc, light_t),
 	STEP_COUNT_REG		= GET_MEMBER_OFFSET(step_counter, light_t),
 	OUT_CYCLE_REG		= GET_MEMBER_OFFSET(dc_out, light_t),

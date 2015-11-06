@@ -75,28 +75,28 @@ ISR(USART_RX_vect) {
 
 	/* Store the incoming char in the proper variable */
 	switch (step) {
-		case REGHN:
-			reg_num = inchar << 4;
-			step = REGLN;
+	case REGHN:
+		reg_num = inchar << 4;
+		step = REGLN;
 		break;
-		case REGLN:
-			reg_num |= inchar;
-			step = (cmd==WRITE_CMD) ? VALHN:WCMD;
-			if (reg_num >= MAX_REG) {
-				reg_num = 0;
-				cmd = ERR_CMD;
-			}
+	case REGLN:
+		reg_num |= inchar;
+		step = (cmd == WRITE_CMD) ? VALHN : WCMD;
+		if (reg_num >= MAX_REG) {
+			reg_num = 0;
+			cmd = ERR_CMD;
+		}
 		break;
-		case VALHN:
-			reg_val = inchar << 4;
-			step = VALLN;
+	case VALHN:
+		reg_val = inchar << 4;
+		step = VALLN;
 		break;
-		case VALLN:
-			reg_val |= inchar;
-			step = WCMD;
+	case VALLN:
+		reg_val |= inchar;
+		step = WCMD;
 		break;
-		default: // Error, no command
-			goto no_cmd_label;
+	default: // Error, no command
+		goto no_cmd_label;
 	}
 	if (step == WCMD) {
 		if (cmd == WRITE_CMD) {
@@ -129,21 +129,21 @@ no_cmd_label:
  * 	Use this function if the TX interrupt is not enabled.
  * 	Blocks the serial port while TX completes
  */
-void put_byte(unsigned char data)
-{
+void put_byte(unsigned char data) {
 	// Stay here until data buffer is empty
-	while (TX_BUSY());
+	while (TX_BUSY())
+		;
 	UDR0 = (unsigned char) data;
 }
 
 void uart_setup() {
 	// Point to light structures.
 	// No security here, you can do whatever you want.
-	registers = (unsigned char *)(all_lights);
+	registers = (unsigned char *) (all_lights);
 	// Serial Comm:
 	clb(PRR, PRUSART0);// Turn on USART
 	UCSR0B |= (1 << RXEN0) | (1 << TXEN0); // Enable USART
-	UCSR0C =  (1 << UCSZ00) | (1 << UCSZ01); // 8-N-1
+	UCSR0C = (1 << UCSZ00) | (1 << UCSZ01); // 8-N-1
 	UBRR0L = BAUD_PRESCALE;
 	UBRR0H = (BAUD_PRESCALE >> 8);
 	RX_INTEN();

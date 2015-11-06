@@ -128,11 +128,11 @@ int main() {
 			//     50% perceived brightness corresponds to 25% power output
 			if (process_gradient(all_lights + WARM_LIGHT)) {
 				all_lights[WARM_LIGHT].dc_out = pgm_read_byte(
-						&(dc_table_log_norm[all_lights[WARM_LIGHT].dc]));
+					&(dc_table_log_norm[all_lights[WARM_LIGHT].dc]));
 			}
 			if (process_gradient(all_lights + COLD_LIGHT)) {
 				all_lights[COLD_LIGHT].dc_out = pgm_read_byte(
-						&(dc_table_log_inv[all_lights[COLD_LIGHT].dc]));
+					&(dc_table_log_inv[all_lights[COLD_LIGHT].dc]));
 			}
 			// And adjust the actual duty cycle in TIMER0
 			if (OCR0A != all_lights[WARM_LIGHT].dc_out)
