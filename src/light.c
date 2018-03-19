@@ -42,7 +42,7 @@ light_t all_lights[N_LIGHT];
  * decrement duty-cycle according to the requested step_x.
  */
 bool process_gradient(light_t *light) {
-	/* Process gradients for warm light */
+	/* Process gradients for selected light */
 	if ((0 != light->step) && (light->long_ref < (++light->long_count))) {
 		light->long_count = 0;
 		if (0 < light->step_count) {

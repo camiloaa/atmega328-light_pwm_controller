@@ -12,18 +12,18 @@
 #include <stdint.h>
 
 enum cmd_steps_e {
-	WCMD,
-	REGHN,
-	REGLN,
-	VALHN,
-	VALLN,
+	WCMD,   // Waiting for command
+	REGHN,  // REGister address High Nibble
+	REGLN,  // REGister address Low Nibble
+	VALHN,  // Register VALUue High Nibble
+	VALLN,  // Register VALUue Low Nibble
 };
 
 enum cmd_e {
-	NO_CMD,
-	WRITE_CMD,
-	READ_CMD,
-	ERR_CMD,
+	NO_CMD,     // No command
+	WRITE_CMD,  // Write value to register
+	READ_CMD,   // Read register
+	ERR_CMD,    // Error
 };
 
 // Global variables
@@ -37,7 +37,8 @@ static volatile unsigned char reg_num = 0;
 static volatile unsigned char reg_val = 0;
 static volatile unsigned char *registers;
 
-// Process incoming data
+/* Process incoming data via IRQ
+ * No error handling. Invalid data is silently dropped */
 ISR(USART_RX_vect) {
 	char inchar;
 	inchar = UDR0;
@@ -73,7 +74,8 @@ ISR(USART_RX_vect) {
 		goto no_cmd_label;
 	}
 
-	/* Store the incoming char in the proper variable */
+	/* Simple state machine to store the incoming char in the proper variable
+	 * No error handlign. */
 	switch (step) {
 	case REGHN:
 		reg_num = inchar << 4;
@@ -120,12 +122,13 @@ ISR(USART_RX_vect) {
 	}
 	return;
 no_cmd_label:
+	// Nothing happening now
 	step = WCMD;
 	cmd = NO_CMD;
 	return;
 }
 
-/*! \brief Transmits a byte
+/* Transmit a byte
  * 	Use this function if the TX interrupt is not enabled.
  * 	Blocks the serial port while TX completes
  */

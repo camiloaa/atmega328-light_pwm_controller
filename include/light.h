@@ -18,16 +18,17 @@
 #define OFF 0
 #define ON 1
 
+/* Data structure for controling light behavior.
+ * */
 typedef struct light_struct light_t;
 struct __attribute__((packed)) light_struct {
-	char step;				// 0
-	unsigned char dc;			// 1
-	unsigned char step_count;		// 2
-	unsigned char dc_out;			// 3
-	unsigned short long_ref;		// 4 - 5
-	unsigned short long_count;		// 6 - 7
-	// Add other fields before padding and reduce padding.
-	// This structure MUST BE 16 bytes big
+	char step;				// 0 : Duty cycle auto-increment value
+	unsigned char dc;			// 1 : Perceived Duty Cycle (128 = 50% brightness)
+	unsigned char step_count;		// 2 : Number of auto-increment steps
+	unsigned char dc_out;			// 3 : Actual Duty Cycle (128 = 50% DC)
+	unsigned short long_ref;		// 4 - 5 : Time between auto-increments (10ms resolution)
+	unsigned short long_count;		// 6 - 7 
+	// This structure MUST BE 16 bytes
 	unsigned char RFU[8];
 };
 
